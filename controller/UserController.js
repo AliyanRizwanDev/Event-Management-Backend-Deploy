@@ -1,8 +1,9 @@
 import User from "../models/UserModel.js";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import dotenv from 'dotenv';
+import logger from '../utils/logger.js';
 dotenv.config();
 
 const createToken = (_id) => {
@@ -19,6 +20,12 @@ const transporter = nodemailer.createTransport({
 });
 
 const sendEmail = (to, subject, text) => {
+  if (!process.env.MAILTRAP_USER || !process.env.MAILTRAP_PASS) {
+    // Mail settings not configured; skip sending but do not fail the request
+    logger.info("Mail credentials not configured; skipping sending email to", to);
+    return;
+  }
+
   const mailOptions = {
     from: process.env.MAILTRAP_HOST_SENDER,
     to: to,
@@ -26,18 +33,31 @@ const sendEmail = (to, subject, text) => {
     text: text,
   };
 
-  transporter.sendMail(mailOptions, (error, info) => {
-    if (error) {
-      return console.log(error);
-    }
-    console.log("Message sent: %s", info.messageId);
-  });
+  try {
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        return logger.error(error);
+      }
+      logger.info('Message sent:', info.messageId);
+    });
+  } catch (err) {
+    logger.error("Failed to send email:", err);
+  }
 };
 
 export const signup = async (req, res) => {
-  const { firstName, lastName, email, password, role } = req.body;
+  const firstName = (req.body.firstName || "").trim();
+  const lastName = (req.body.lastName || "").trim();
+  const email = (req.body.email || "").toLowerCase().trim();
+  const password = req.body.password || "";
+  const role = (req.body.role || "").trim();
 
   try {
+    // Basic request validation
+    if (!firstName || !lastName || !email || !password || !role) {
+      return res.status(400).json({ error: "All fields must be provided" });
+    }
+
     const user = await User.signup(firstName, lastName, email, password, role);
     const token = createToken(user._id);
 
@@ -60,9 +80,14 @@ export const signup = async (req, res) => {
 };
 
 export const login = async (req, res) => {
-  const { email, password } = req.body;
+  const email = (req.body.email || "").toLowerCase().trim();
+  const password = req.body.password || "";
 
   try {
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
     const user = await User.login(email, password);
 
     const token = createToken(user._id);
@@ -78,7 +103,7 @@ export const login = async (req, res) => {
 
     sendEmail(email, "Login Notification", `Hi ${user.firstName}, you have successfully logged in!`);
 
-    res.status(201).json({ message: "User logged in successfully", user: userData });
+    res.status(200).json({ message: "User logged in successfully", user: userData });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

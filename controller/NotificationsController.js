@@ -1,6 +1,7 @@
 import Notification from "../models/NotificationsModel.js";
 import User from "../models/UserModel.js";
 import nodemailer from "nodemailer";
+import logger from "../utils/logger.js";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -22,9 +23,9 @@ const sendEmail = (to, subject, text) => {
   };
   transporter.sendMail(mailOptions, (error, info) => {
     if (error) {
-      return console.log(error);
+      return logger.error(error);
     }
-    console.log("Message sent: %s", info.messageId);
+    logger.info('Message sent:', info.messageId);
   });
 };
 

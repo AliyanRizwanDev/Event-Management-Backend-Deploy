@@ -2,7 +2,8 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
-import UserRoutes from "./Routes/UserRoutes.js";
+import logger from './utils/logger.js';
+import UserRoutes from "./routes/UserRoutes.js";
 import path from "path";
 dotenv.config();
 import { fileURLToPath } from "url";
@@ -18,14 +19,28 @@ app.use(
   express.static(path.join(__dirname, "Public", "uploads"))
 );
 
-app.listen(process.env.PORT, () => {
-  console.log(`Listening on PORT ${process.env.PORT}`);
-  mongoose
-    .connect(process.env.MONGO_URI)
-    .then(() => {
-      console.log("Connect to DB");
-    })
-    .catch((error) => {
-      console.log(error);
-    });
+app.get('/health', (req, res) => {
+  const status = mongoose.connection.readyState === 1 ? 'ok' : 'disconnected';
+  res.status(200).json({ status, env: process.env.NODE_ENV || 'development' });
 });
+
+const PORT = process.env.PORT || 8050;
+
+const start = async () => {
+  try {
+    if (!process.env.MONGO_URI) {
+      logger.error("MONGO_URI is not defined in environment");
+      process.exit(1);
+    }
+    await mongoose.connect(process.env.MONGO_URI);
+    logger.info("Connected to DB");
+    app.listen(PORT, () => {
+      logger.info(`Listening on PORT ${PORT}`);
+    });
+  } catch (error) {
+    logger.error("Failed to start server:", error);
+    process.exit(1);
+  }
+};
+
+start();

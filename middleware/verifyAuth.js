@@ -1,8 +1,9 @@
 import jwt from "jsonwebtoken";
 import User from "../models/UserModel.js";
+import logger from '../utils/logger.js';
 
 export const verifyAuth = async (req, res, next) => {
-  console.log("Entered verifyAuth middleware");
+  logger.info('verifyAuth middleware invoked');
   const { authorization } = req.headers;
   if (!authorization) {
     return res.status(401).json({ error: "authorization token required" });
@@ -21,7 +22,7 @@ export const verifyAuth = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
-    console.error("Error in verifyAuth middleware:", error);
+    logger.error("Error in verifyAuth middleware:", error);
     return res.status(401).json({ error: "Request is not authorized" });
   }
 };

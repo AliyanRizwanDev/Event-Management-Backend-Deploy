@@ -2,6 +2,7 @@ import Event from "../models/EventModel.js";
 import User from "../models/UserModel.js";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
+import logger from "../utils/logger.js";
 import cron from "node-cron";
 import uploadImage  from "../middleware/upload.js";
 
@@ -17,6 +18,11 @@ const transporter = nodemailer.createTransport({
 });
 
 const sendEmail = (to, subject, text) => {
+  if (!process.env.MAILTRAP_USER || !process.env.MAILTRAP_PASS) {
+    logger.info("Mail credentials not configured; skipping sending email to", to);
+    return;
+  }
+
   const mailOptions = {
     from: process.env.MAILTRAP_HOST_SENDER,
     to: to,
@@ -24,17 +30,26 @@ const sendEmail = (to, subject, text) => {
     text: text,
   };
 
-  transporter.sendMail(mailOptions, (error, info) => {
-    if (error) {
-      return console.log(error);
-    }
-    console.log("Message sent: %s", info.messageId);
-  });
+  try {
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        return logger.error(error);
+      }
+      logger.info('Message sent:', info.messageId);
+    });
+  } catch (err) {
+    logger.error("Failed to send email:", err);
+  }
 };
 
 export const createEvent = async (req, res) => {
   try {
     const { title, description, date, time, venue, ticketTypes, discountCodes, organizer } = req.body;
+
+    // Basic validation
+    if (!title || !description || !date || !time || !venue || !organizer) {
+      return res.status(400).json({ message: "Missing required fields for creating event" });
+    }
 
     
     let parsedTicketTypes;
@@ -45,7 +60,7 @@ export const createEvent = async (req, res) => {
     } catch (error) {
       return res.status(400).json({ message: "Invalid format for ticketTypes or discountCodes", error });
     }
-    console.log("File:",req.file);
+    logger.info('File:', req.file);
 
     
     const event = new Event({
@@ -92,7 +107,11 @@ export const getEventById = async (req, res) => {
 
 export const updateEvent = async (req, res) => {
   try {
-      const { title, description, date, time, venue, ticketTypes, discountCodes, organizer } = req.body;
+    const { title, description, date, time, venue, ticketTypes, discountCodes, organizer } = req.body;
+
+    if (!title || !description || !date || !time || !venue) {
+      return res.status(400).json({ message: "Missing required fields for updating event" });
+    }
       
       let parsedTicketTypes;
       let parsedDiscountCodes;
@@ -183,7 +202,7 @@ export const markEventAsAttended = async (req, res) => {
 
     return res.status(200).json({ message: "Event marked as attended", event });
   } catch (error) {
-    console.error(error);
+    logger.error(error);
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -254,6 +273,9 @@ export const bookTicket = async (req, res) => {
   const { eventId, attendee, ticketType, discountCode } = req.body;
 
   try {
+    if (!eventId || !attendee || !ticketType) {
+      return res.status(400).json({ message: "Missing booking information" });
+    }
     const event = await Event.findById(eventId);
     if (!event) {
       return res.status(404).json({ message: "Event not found" });
@@ -343,7 +365,7 @@ const scheduleReminders = () => {
         });
       });
     } catch (error) {
-      console.error("Error sending reminders:", error);
+      logger.error("Error sending reminders:", error);
     }
   });
 };
